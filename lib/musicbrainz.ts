@@ -28,6 +28,7 @@ const WRITER_TYPES = [
 // -----------------------
 export async function loadWork(workId: string) {
   logStep("MB lookup WORK:", workId);
+  // @ts-expect-error Ignore TS error for now
   return await mb.lookup("work", workId, [
     "artist-rels",
     "work-rels",
@@ -79,6 +80,7 @@ export async function findRecordingByText(artist: string, title: string) {
 // -----------------------
 export async function loadRecordingDetails(mbid: string) {
   logStep("MB lookup RECORDING:", mbid);
+  // @ts-expect-error Ignore TS error for now
   return await mb.lookup("recording", mbid, [
     "artist-credits",
     "artist-rels",

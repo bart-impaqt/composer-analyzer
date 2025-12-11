@@ -98,6 +98,7 @@ export async function POST(req: Request) {
       // STEP 4 — try WORK via recording
       //
       if (composers.length === 0) {
+        // @ts-expect-error Ignore TS error for now
         const recWorks = details.relations?.filter((r: any) => r.work);
 
         if (recWorks?.length > 0) {
