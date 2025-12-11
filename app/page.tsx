@@ -1,65 +1,129 @@
-import Image from "next/image";
+"use client";
+
+import { useState } from "react";
 
 export default function Home() {
+  const [file, setFile] = useState<File | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [results, setResults] = useState<any[]>([]);
+
+  const handleUpload = async () => {
+    if (!file) return;
+
+    setLoading(true);
+
+    const text = await file.text();
+    const rows = text
+      .split("\n")
+      .map((r) => r.trim())
+      .filter(Boolean);
+
+    const res = await fetch("/api/composers", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rows }),
+    });
+
+    const data = await res.json();
+    setResults(data.results || []);
+    setLoading(false);
+  };
+
+  const exportCSV = () => {
+    if (!results || results.length === 0) return;
+
+    const header = ["artist", "title", "song writer"];
+    const rows = results.map((r) => [r.artist, r.title, (r.composers || []).join("; ")]);
+
+    const escape = (v: any) => {
+      const s = String(v ?? "");
+      return `"${s.replace(/"/g, '""')}"`;
+    };
+
+    const csv = [header, ...rows].map((row) => row.map(escape).join(",")).join("\r\n");
+    const blob = new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "composer-results.csv";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="app-container">
+      <div className="card">
+        <div className="header">
+          <div>
+            <h1 className="title">🎼 Composer Finder</h1>
+            <p className="subtitle">Upload a CSV with rows like: <strong>Artist - Title</strong></p>
+          </div>
+          <div style={{ textAlign: "right", minWidth: 120 }}>
+            <div className="subtitle">Quick lookup · MusicBrainz + Spotify</div>
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
+
+        <div className="controls">
+          <label className="file-input">
+            <input
+              type="file"
+              accept=".csv"
+              onChange={(e) => setFile(e.target.files?.[0] || null)}
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 3v10" stroke="#6b21a8" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M8 7l4-4 4 4" stroke="#6b21a8" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#6b21a8" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            <span>{file ? file.name : "Choose CSV file"}</span>
+          </label>
+
+          <div className="actions">
+            <button
+              className="btn primary"
+              onClick={handleUpload}
+              disabled={!file || loading}
+            >
+              {loading ? "Searching…" : "Start"}
+            </button>
+
+            <button
+              className="btn ghost"
+              onClick={exportCSV}
+              disabled={!results || results.length === 0}
+            >
+              Export CSV
+            </button>
+          </div>
         </div>
-      </main>
+
+        <div className="results">
+          {results.length > 0 ? (
+            <table className="results-table">
+              <thead>
+                <tr>
+                  <th>Artist</th>
+                  <th>Title</th>
+                  <th>Composers</th>
+                </tr>
+              </thead>
+              <tbody>
+                {results.map((r, idx) => (
+                  <tr key={idx}>
+                    <td>{r.artist}</td>
+                    <td>{r.title}</td>
+                    <td>{(r.composers || []).join(", ")}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div className="empty">No results yet — upload a CSV and click Start.</div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
