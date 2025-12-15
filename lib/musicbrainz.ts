@@ -8,19 +8,19 @@ const mb = new MusicBrainzApi({
   rateLimit: [1, 1],
 });
 
-const WRITER_TYPES = [
+const PRIMARY_WRITER_TYPES = [
   "composer",
   "lyricist",
   "writer",
   "author",
   "librettist",
+];
+
+const SECONDARY_TYPES = [
   "arranger",
   "orchestrator",
   "based on",
   "based on work",
-  "composer of",
-  "writer of",
-  "poet",
 ];
 
 // -----------------------
@@ -107,11 +107,11 @@ export function extractComposersFromRecording(details: any) {
   });
 
   // Credits
-  details["artist-credit"]?.forEach((ac: any) => {
-    if (WRITER_TYPES.includes(ac.type)) {
-      composers.add(clean(ac.name));
-    }
-  });
+  // details["artist-credit"]?.forEach((ac: any) => {
+  //   if (WRITER_TYPES.includes(ac.type)) {
+  //     composers.add(clean(ac.name));
+  //   }
+  // });
 
   return [...composers];
 }
@@ -120,7 +120,7 @@ function extractNamesFromRelations(relations: any[], composers: Set<string>) {
   if (!relations) return;
 
   for (const rel of relations) {
-    if (WRITER_TYPES.includes(rel.type)) {
+    if (PRIMARY_WRITER_TYPES.includes(rel.type)) {
       if (rel.artist?.name) {
         composers.add(clean(rel.artist.name));
       }
@@ -136,7 +136,7 @@ export function extractComposersFromWork(work: any) {
 
   if (work.relations) {
     for (const rel of work.relations) {
-      if (WRITER_TYPES.includes(rel.type)) {
+      if (PRIMARY_WRITER_TYPES.includes(rel.type)) {
         if (rel.artist?.name) {
           composers.add(clean(rel.artist.name));
         }
