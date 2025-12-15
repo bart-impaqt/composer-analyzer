@@ -40,16 +40,6 @@ export async function POST(req: Request) {
 
       const musoComposers = await findMusoComposers(artist, title);
 
-      if (!musoComposers) {
-        results.push({
-          artist,
-          title,
-          isrc: null,
-          source: "MUSO",
-          composers: "Unrecognized track",
-        });
-      }
-
       if (musoComposers && musoComposers.length > 0) {
         logStep("✅ Muso composers:", musoComposers);
 
