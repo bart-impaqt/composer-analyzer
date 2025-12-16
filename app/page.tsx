@@ -32,16 +32,34 @@ export default function Home() {
   const exportCSV = () => {
     if (!results || results.length === 0) return;
 
-    const header = ["artist", "title", "song writer"];
-    const rows = results.map((r) => [r.artist, r.title, (r.composers || []).join("; ")]);
+    // Column A, B, C..R, S
+    const header = [
+      "artist",
+      "title",
+      ...Array(16).fill(""), // C → R
+      "song writer", // S
+    ];
+
+    const rows = results.map((r) => [
+      r.artist, // A
+      r.title, // B
+      ...Array(16).fill(""), // C → R
+      (r.composers || []).join("; "), // S
+    ]);
 
     const escape = (v: any) => {
       const s = String(v ?? "");
       return `"${s.replace(/"/g, '""')}"`;
     };
 
-    const csv = [header, ...rows].map((row) => row.map(escape).join(",")).join("\r\n");
-    const blob = new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8;" });
+    const csv = [header, ...rows]
+      .map((row) => row.map(escape).join(","))
+      .join("\r\n");
+
+    const blob = new Blob(["\uFEFF", csv], {
+      type: "text/csv;charset=utf-8;",
+    });
+
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
