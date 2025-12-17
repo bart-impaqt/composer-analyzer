@@ -6,27 +6,52 @@ export default function Home() {
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<any[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   const handleUpload = async () => {
     if (!file) return;
 
+    setError(null);
     setLoading(true);
 
-    const text = await file.text();
-    const rows = text
-      .split("\n")
-      .map((r) => r.trim())
-      .filter(Boolean);
+    try {
+      const text = await file.text();
+      const rows = text
+        .split("\n")
+        .map((r) => r.trim())
+        .filter(Boolean);
 
-    const res = await fetch("/api/composers", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ rows }),
-    });
+      const res = await fetch("/api/composers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rows }),
+      });
 
-    const data = await res.json();
-    setResults(data.results || []);
-    setLoading(false);
+      let data: any = null;
+      try {
+        data = await res.json();
+      } catch {
+        // ignore JSON parse errors and fall back to generic message
+      }
+
+      if (!res.ok) {
+        const message =
+          (data && (data.error || data.message)) ||
+          `Server error (${res.status}) while searching composers.`;
+        throw new Error(message);
+      }
+
+      setResults((data && data.results) || []);
+    } catch (err: any) {
+      console.error(err);
+      setResults([]);
+      setError(
+        err?.message ||
+          "Something went wrong while searching. Please try again."
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   const exportCSV = () => {
@@ -36,14 +61,12 @@ export default function Home() {
     const header = [
       "artist",
       "title",
-      ...Array(16).fill(""), // C → R
       "song writer", // S
     ];
 
     const rows = results.map((r) => [
       r.artist, // A
       r.title, // B
-      ...Array(16).fill(""), // C → R
       (r.composers || []).join("; "), // S
     ]);
 
@@ -88,7 +111,10 @@ export default function Home() {
             <input
               type="file"
               accept=".csv"
-              onChange={(e) => setFile(e.target.files?.[0] || null)}
+              onChange={(e) => {
+                setFile(e.target.files?.[0] || null);
+                setError(null);
+              }}
             />
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M12 3v10" stroke="#6b21a8" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
@@ -116,6 +142,30 @@ export default function Home() {
             </button>
           </div>
         </div>
+
+        {loading && (
+          <div
+            className="progress"
+            aria-label="Searching for composers"
+            aria-busy="true"
+          >
+            <div className="progress-bar" />
+          </div>
+        )}
+
+        {error && (
+          <div className="alert" role="alert">
+            <span>{error}</span>
+            <button
+              type="button"
+              className="alert-close"
+              aria-label="Dismiss error"
+              onClick={() => setError(null)}
+            >
+              ×
+            </button>
+          </div>
+        )}
 
         <div className="results">
           {results.length > 0 ? (
