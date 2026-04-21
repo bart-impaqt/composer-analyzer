@@ -10,12 +10,8 @@
   },
   "dependencies": {
     "csv-parser": "^3.2.0",
-<<<<<<< HEAD
-    "next": "16.0.8",
-=======
     "musicbrainz-api": "^0.27.0",
     "next": "16.0.10",
->>>>>>> 6d26fc898c949df0dfdbcc3afc7ebdbe766d55a1
     "node-fetch": "^2.7.0",
     "react": "19.2.1",
     "react-dom": "19.2.1"
