@@ -1,158 +1,97 @@
-import { findSpotifyISRC } from "@/lib/spotify";
-import {
-  findRecordingByISRC,
-  findRecordingByText,
-  loadRecordingDetails,
-  extractComposersFromRecording,
-  loadWork,
-  extractComposersFromWork,
-  findWorkLucene,
-  findWorkAdvanced,
-  findParentWorkComposers,
-} from "@/lib/musicbrainz";
+import { findGeniusComposers } from "@/lib/genius";
 import { clean, logStep } from "@/lib/helpers";
-import { findMusoComposers } from "@/lib/muso";
+
+type ComposerResult = {
+  artist: string;
+  title: string;
+  isrc: string | null;
+  source?: string;
+  composers: string[];
+  error?: string;
+};
+
+const composerCache = new Map<string, string[]>();
+
+function trimCsvNoise(value: string) {
+  return value.replace(/(?:,\s*)+$/g, "").trim();
+}
+
+function parseInputRow(row: string) {
+  const cleanedRow = clean(row.replace(/^\uFEFF/, ""));
+  const dashIndex = cleanedRow.indexOf(" - ");
+
+  if (dashIndex >= 0) {
+    return {
+      artist: trimCsvNoise(clean(cleanedRow.slice(0, dashIndex))),
+      title: trimCsvNoise(clean(cleanedRow.slice(dashIndex + 3))),
+    };
+  }
+
+  const tabParts = cleanedRow.split("\t");
+  return {
+    artist: trimCsvNoise(clean(tabParts[0] ?? "")),
+    title: trimCsvNoise(clean(tabParts[1] ?? "")),
+  };
+}
+
+function cacheKey(artist: string, title: string) {
+  return `${artist.toLowerCase()}::${title.toLowerCase()}`;
+}
+
+function getFromCache(artist: string, title: string) {
+  return composerCache.get(cacheKey(artist, title)) ?? null;
+}
+
+function setInCache(artist: string, title: string, composers: string[]) {
+  composerCache.set(cacheKey(artist, title), composers);
+}
+
+async function resolveComposers(
+  artist: string,
+  title: string
+): Promise<{ composers: string[]; source: string }> {
+  const cached = getFromCache(artist, title);
+  if (cached) {
+    logStep("Cache hit:", artist, "-", title);
+    return { composers: cached, source: "CACHE" };
+  }
+
+  logStep("Trying Genius...");
+  const geniusComposers = await findGeniusComposers(artist, title);
+
+  if (geniusComposers.length > 0) {
+    logStep("Genius composers:", geniusComposers);
+    setInCache(artist, title, geniusComposers);
+    return { composers: geniusComposers, source: "GENIUS" };
+  }
+
+  setInCache(artist, title, ["NOT FOUND"]);
+  return { composers: ["NOT FOUND"], source: "GENIUS" };
+}
 
 export async function POST(req: Request) {
-  const { rows } = await req.json();
-  const results: any[] = [];
+  const body = (await req.json()) as { rows?: unknown };
+  const rows = Array.isArray(body.rows) ? body.rows : [];
+  const results: ComposerResult[] = [];
 
   for (const row of rows) {
-    let [artistRaw, titleRaw] = row.includes(" - ")
-      ? row.split(" - ")
-      : row.split("\t");
-
-    const artist = clean(artistRaw);
-    const title = clean(titleRaw);
+    const { artist, title } = parseInputRow(String(row ?? ""));
+    if (!artist && !title) continue;
 
     logStep("--------------------------------------------");
-    logStep("🔍 Track:", artist, "-", title);
-
-    let composers: string[] = [];
-    let isrc = null;
-    let recording = null;
+    logStep("Track:", artist, "-", title);
 
     try {
-      //
-      // STEP -1 — MUSO AI (authoritative publishers data)
-      //
-      logStep("🎵 Trying Muso AI…");
-
-      const musoComposers = await findMusoComposers(artist, title);
-
-      if (musoComposers && musoComposers.length > 0) {
-        logStep("✅ Muso composers:", musoComposers);
-
-        results.push({
-          artist,
-          title,
-          isrc: null,
-          source: "MUSO",
-          composers: musoComposers,
-        });
-
-        continue; // ⛔ stop here, skip Spotify + MusicBrainz
-      }
-
-      
-      // STEP 0 — Direct Work search FIRST (NEW)
-      
-      // logStep("🎯 Trying direct MB WORK search (Lucene)…");
-      // const work = await findWorkAdvanced(title, artist);
-
-      // if (work) {
-      //   const workDetails = await loadWork(work.id);
-      //   composers = extractComposersFromWork(workDetails);
-
-      //   if (composers.length > 0) {
-      //     logStep("🎼 Found composers directly from WORK:", composers);
-
-      //     results.push({
-      //       artist,
-      //       title,
-      //       isrc: null,
-      //       mbRecordingId: null,
-      //       composers,
-      //     });
-
-      //     continue;
-      //   }
-      // }
-
-      //
-      // STEP 1 — Spotify → ISRC
-      //
-      // const spotify = await findSpotifyISRC(artist, title);
-
-      // if (spotify?.isrc) {
-      //   isrc = spotify.isrc;
-      //   recording = await findRecordingByISRC(isrc);
-      // }
-
-      //
-      // STEP 2 — fallback to recording text search
-      //
-      // if (!recording) {
-      //   logStep("⚠️ ISRC failed — using recording text search…");
-      //   recording = await findRecordingByText(artist, title);
-      // }
-
-      // if (!recording) {
-      //   results.push({
-      //     artist,
-      //     title,
-      //     isrc,
-      //     composers: ["NOT FOUND"],
-      //   });
-      //   continue;
-      // }
-
-      //
-      // STEP 3 — detailed recording info
-      //
-      // const details = await loadRecordingDetails(recording.id);
-      // composers = extractComposersFromRecording(details);
-
-      // if (composers.length > 0) {
-      //   logStep("🎼 Extracted from RECORDING:", composers);
-      // }
-
-      //
-      // STEP 4 — try WORK via recording
-      //
-      // if (composers.length === 0) {
-      //   // @ts-expect-error Ignore TS error for now
-      //   const recWorks = details.relations?.filter(
-      //     (r: any) => r.type === "performance" && r.work
-      //   );
-
-      //   if (recWorks?.length > 0) {
-      //     const workId = recWorks[0].work.id;
-
-      //     const workDetails = await loadWork(workId);
-      //     let workComposers = extractComposersFromWork(workDetails);
-
-      //     if (workComposers.length === 0) {
-      //       workComposers = await findParentWorkComposers(workDetails);
-      //     }
-      //   }
-      // }
-
-      // results.push({
-      //   artist,
-      //   title,
-      //   isrc,
-      //   mbRecordingId: recording?.id ?? null,
-      //   composers: composers.length ? composers : ["NONE LISTED"],
-      // });
-    } catch (err: any) {
-      console.error("❌ ERROR:", err);
+      const { composers, source } = await resolveComposers(artist, title);
+      results.push({ artist, title, isrc: null, source, composers });
+    } catch (err: unknown) {
+      console.error("ERROR:", err);
       results.push({
         artist,
         title,
-        isrc,
+        isrc: null,
         composers: ["ERROR"],
-        error: String(err),
+        error: err instanceof Error ? err.message : String(err),
       });
     }
   }

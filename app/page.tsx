@@ -102,7 +102,7 @@ export default function Home() {
             <p className="subtitle">Upload a CSV with rows like: <strong>Artist - Title</strong></p>
           </div>
           <div style={{ textAlign: "right", minWidth: 120 }}>
-            <div className="subtitle">Quick lookup · MusicBrainz + Spotify</div>
+            <div className="subtitle">Quick lookup · Genius</div>
           </div>
         </div>
 
